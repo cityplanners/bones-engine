@@ -6,8 +6,10 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod window;
+
 #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
-pub fn run() {
+pub async fn run() {
     cfg_if::cfg_if! {
     if #[cfg(target_arch = "wasm32")] {
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -38,24 +40,56 @@ pub fn run() {
             .expect("Couldn't append canvas to document body.");
     }
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window.id() => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => *control_flow = ControlFlow::Exit,
+    let mut state = window::State::new(window).await;
+
+    event_loop.run(move |event, _, control_flow| {
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == state.window().id() => {
+                if !state.input(event) {
+                    match event {
+                        WindowEvent::CloseRequested
+                        | WindowEvent::KeyboardInput {
+                            input:
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Escape),
+                                    ..
+                                },
+                            ..
+                        } => *control_flow = ControlFlow::Exit,
+                        WindowEvent::Resized(physical_size) => {
+                            state.resize(*physical_size);
+                        }
+                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                            // new_inner_size is &&mut so w have to dereference it twice
+                            state.resize(**new_inner_size);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Event::RedrawRequested(window_id) if window_id == state.window().id() => {
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    // Reconfigure the surface if it's lost or outdated
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
+                    // The system is out of memory, we should probably quit
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+
+                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface timeout"),
+                }
+            }
+            Event::RedrawEventsCleared => {
+                // RedrawRequested will only trigger once, unless we manually
+                // request it.
+                state.window().request_redraw();
+            }
             _ => {}
-        },
-        _ => {}
+        }
     });
 }
 
