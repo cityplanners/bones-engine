@@ -10,12 +10,19 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
+    clear_color: wgpu::Color
 }
 
 impl State {
     // Creating some of the wgpu types requires async code
     pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
+        let clear_color = wgpu::Color {
+            r: 0.1,
+            g: 0.2,
+            b: 0.3,
+            a: 1.0,
+        };
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
@@ -83,6 +90,7 @@ impl State {
             queue,
             config,
             size,
+            clear_color,
         }
     }
 
@@ -100,6 +108,17 @@ impl State {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::CursorMoved { device_id, position, modifiers } => {
+                self.clear_color = wgpu::Color {
+                    r: position.x * 0.001,
+                    g: position.y * 0.001,
+                    b: (position.x / position.y) * 0.1,
+                    a: 1.0,
+                }
+            }
+            _ => {}
+        }
         false
     }
 
@@ -120,12 +139,7 @@ impl State {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(self.clear_color),
                         store: true,
                     },
                 })],
