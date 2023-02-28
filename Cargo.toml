@@ -19,6 +19,7 @@ cgmath = "0.18"
 tobj = { version = "3.2.1", features = [
     "async",
 ]}
+instant = "0.1"
 
 [build-dependencies]
 anyhow = "1.0"
