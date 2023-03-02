@@ -1,0 +1,6 @@
+[package]
+name = "bones_macros"
+version = "0.0.1"
+
+[lib]
+proc-macro = true

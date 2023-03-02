@@ -7,6 +7,7 @@ use winit::{
 };
 
 mod engine;
+pub use bones_macros::Component;
 
 #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
 pub async fn run() {
