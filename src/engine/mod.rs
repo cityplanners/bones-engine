@@ -6,7 +6,7 @@ use winit::{
 use cgmath::prelude::*;
 
 mod texture;
-mod model;
+pub mod model;
 mod resources;
 mod camera;
 

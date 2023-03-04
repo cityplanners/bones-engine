@@ -14,7 +14,7 @@ impl World {
         }
     }
 
-    fn spawn(&mut self) -> usize {
+    pub fn spawn_entity(&mut self) -> usize {
         let entity_id = self.entity_count;
         for component_vec in self.component_vecs.iter_mut() {
             component_vec.push_none();
@@ -23,7 +23,7 @@ impl World {
         entity_id
     }
 
-    fn add_component_to_entity<ComponentType: 'static>(
+    pub fn add_component_to_entity<ComponentType: 'static>(
         &mut self,
         entity: usize,
         component: ComponentType,
@@ -54,7 +54,7 @@ impl World {
             .push(Box::new(RefCell::new(new_component_vec)));
     }
 
-    fn borrow_component_vec_mut<ComponentType: 'static>(
+    pub fn borrow_component_vec_mut<ComponentType: 'static>(
         &self,
     ) -> Option<RefMut<Vec<Option<ComponentType>>>> {
         for component_vec in self.component_vecs.iter() {

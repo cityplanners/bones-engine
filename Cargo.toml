@@ -21,7 +21,6 @@ tobj = { version = "3.2.1", features = [
     "async",
 ]}
 instant = "0.1"
-bones_macros = { path = "macros", version = "0.0.1" }
 pollster = "0.2"
 
 [build-dependencies]

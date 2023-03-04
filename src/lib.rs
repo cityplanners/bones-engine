@@ -12,5 +12,6 @@ pub mod ecs;
 pub mod prelude {
     pub use crate::{
         ecs::*,
+        engine::model::{ Model, Mesh, Material }
     };
 }
