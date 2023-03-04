@@ -2,6 +2,7 @@
 name = "bones"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -20,6 +21,7 @@ tobj = { version = "3.2.1", features = [
     "async",
 ]}
 instant = "0.1"
+pollster = "0.2"
 
 [build-dependencies]
 anyhow = "1.0"
