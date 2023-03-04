@@ -1,7 +1,4 @@
 use std::cell::RefCell;
-pub trait Component: Send + Sync {
-    // fn push_none(&mut self);
-}
 
 pub trait ComponentVec {
     fn as_any(&self) -> &dyn std::any::Any;

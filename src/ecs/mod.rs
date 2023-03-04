@@ -6,10 +6,8 @@ use winit::{
     window::WindowBuilder,
 };
 pub mod world;
-pub mod entity;
 pub mod component;
 pub use world::World;
-pub use component::Component;
 
 pub type System = fn(&mut World);
 
