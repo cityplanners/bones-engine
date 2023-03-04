@@ -1,4 +1,3 @@
-use generational_arena::{ Arena, Index };
 pub use bones_macros::Component;
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
@@ -10,17 +9,23 @@ use winit::{
 pub mod world;
 pub mod entity;
 pub mod component;
-use world::World;
+pub use world::World;
 pub use component::Component;
+
+pub type System = fn(&mut World);
 
 pub struct Skeleton {
     world: World,
+    init_system: Vec<System>,
+    system: Vec<System>
 }
 
 impl Default for Skeleton {
     fn default() -> Self {
         Self {
-            world: World::new()
+            world: World::new(),
+            init_system: Vec::new(),
+            system: Vec::new()
         }
     }
 }
@@ -30,8 +35,12 @@ impl Skeleton {
         Skeleton::default()
     }
 
+    pub fn run(self) {
+        pollster::block_on(self._internal_run());
+    }
+
     #[cfg_attr(target_arch="wasm32", wasm_bindgen(start))]
-    pub async fn run(&self) {
+    async fn _internal_run(mut self) {
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "wasm32")] {
                 std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -42,6 +51,11 @@ impl Skeleton {
         }
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new().build(&event_loop).unwrap();
+
+        // iterate over init systems
+        for &system in &self.init_system[..] {
+            system(&mut self.world);
+        }
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -123,9 +137,21 @@ impl Skeleton {
                 }
                 _ => {}
             }
+        
+            // iterate over systems
+            for &system in &self.system[..] {
+                system(&mut self.world);
+            }
         });
     }
 
-    // pub fn spawn(&self, entity: Entity) -> Skeleton {
-    // }
+    pub fn add_init_system(mut self, system: System) -> Skeleton {
+        self.system.push(system);
+        self
+    }
+
+    pub fn add_system(mut self, system: System) -> Skeleton {
+        self.system.push(system);
+        self
+    }
 }

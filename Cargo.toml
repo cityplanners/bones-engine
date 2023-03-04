@@ -22,7 +22,7 @@ tobj = { version = "3.2.1", features = [
 ]}
 instant = "0.1"
 bones_macros = { path = "macros", version = "0.0.1" }
-generational-arena = "0.2.8"
+pollster = "0.2"
 
 [build-dependencies]
 anyhow = "1.0"

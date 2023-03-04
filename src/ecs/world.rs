@@ -14,7 +14,7 @@ impl World {
         }
     }
 
-    fn new_entity(&mut self) -> usize {
+    fn spawn(&mut self) -> usize {
         let entity_id = self.entity_count;
         for component_vec in self.component_vecs.iter_mut() {
             component_vec.push_none();
