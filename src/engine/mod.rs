@@ -1,4 +1,4 @@
-use std::cell::{RefCell, RefMut, Ref};
+use std::cell::{RefCell, RefMut};
 use wgpu::util::DeviceExt;
 use winit::{
     window::Window,
@@ -6,7 +6,6 @@ use winit::{
 };
 use cgmath::prelude::*;
 use crate::engine::model::RenderMethod;
-use crate::prelude::World;
 use crate::ecs::component::*;
 
 mod texture;
@@ -139,7 +138,7 @@ pub struct State {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: Window) -> State {
+    pub async fn new(window: Window) -> Self {
         let size = window.inner_size();
         let clear_color = wgpu::Color {
             r: 0.1,
@@ -364,18 +363,6 @@ impl State {
             label: None,
         });
 
-        /*
-        let debug_material = {
-            let diffuse_bytes = include_bytes!("../../res/brick-diffuse.jpg");
-            let normal_bytes = include_bytes!("../../res/brick-normal.jpg");
-
-            let diffuse_texture = texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "res/alt-diffuse.png", false).unwrap();
-            let normal_texture = texture::Texture::from_bytes(&device, &queue, normal_bytes, "res/alt-normal.png", true).unwrap();
-            
-            model::Material::new(&device, "alt-material", diffuse_texture, normal_texture, &texture_bind_group_layout)
-        };
-        */
-
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -577,20 +564,6 @@ impl State {
 
             } 
 
-            /*
-            use model::DrawModel;
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-            render_pass.draw_model_instanced(&self.obj_model, 0..self.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
-
-            render_pass.draw_model_instanced_with_material(
-                &self.obj_model,
-                &self.debug_material,
-                0..self.instances.len() as u32,
-                &self.camera_bind_group,
-                &self.light_bind_group,
-            );
-            */
         }
 
         // submit will accept anything that implements IntoIter

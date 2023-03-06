@@ -213,5 +213,5 @@ pub async fn load_model(
         })
         .collect::<Vec<_>>();
 
-    Ok(model::Model { meshes, materials, render_method: model::RenderMethod::Draw_Model })
+    Ok(model::Model { meshes, materials, render_method: model::RenderMethod::Draw_Model_Instanced })
 }

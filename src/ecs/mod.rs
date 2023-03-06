@@ -1,18 +1,13 @@
-use std::cell::{RefCell, RefMut, Ref};
-use std::borrow::{Borrow, BorrowMut};
-
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::{
     event::*,
     event_loop::{ ControlFlow, EventLoop },
-    window::{ WindowBuilder, Window },
+    window::WindowBuilder,
 };
 pub mod world;
 pub mod component;
 pub use world::World;
-
-use crate::engine::model;
 
 pub type System = fn(&mut World);
 
@@ -131,11 +126,6 @@ impl Skeleton {
                     let dt = now - last_render_time;
                     last_render_time = now;
                     self.world.state.update(dt);
-                    // let world = &mut self.world;
-                    //let models: Ref<Vec<Option<model::Model>>>;
-                    // {
-                    //    let models = self.world.borrow_component_vec::<model::Model>().unwrap();
-                    // }
                     match self.world.state.render() {
                         Ok(_) => {}
                         // Reconfigure the surface if it's lost or outdated

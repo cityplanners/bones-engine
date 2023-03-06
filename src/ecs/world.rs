@@ -1,19 +1,14 @@
 use std::cell::{RefCell, RefMut, Ref};
-use crate::ecs::component::*;
 use crate::engine::State;
 use crate::engine::model::Model;
 
 pub struct World {
-    // entity_count: usize,
-    // component_vecs: Vec<Box<dyn ComponentVec>>,
     pub state: State,
 }
 
 impl World {
     pub fn new(state: State) -> World {
         Self {
-            // entity_count: 0,
-            // component_vecs: Vec::new(),
             state
         }
     }
@@ -58,20 +53,6 @@ impl World {
             .push(Box::new(RefCell::new(new_component_vec)));
     }
 
-    pub fn borrow_component_vec<ComponentType: 'static>(
-        &self,
-    ) -> Option<Ref<Vec<Option<ComponentType>>>> {
-        for component_vec in self.state.component_vecs.iter() {
-            if let Some(component_vec) = component_vec
-                .as_any()
-                .downcast_ref::<RefCell<Vec<Option<ComponentType>>>>()
-            {
-                return Some(component_vec.borrow());
-            }
-        }
-        None
-    }
-
     pub fn borrow_component_vec_mut<ComponentType: 'static>(
         &self,
     ) -> Option<RefMut<Vec<Option<ComponentType>>>> {
@@ -93,9 +74,7 @@ impl World {
                 Some(model)
             }
             Err(error) => {
-                // TODO: Handle error
                 panic!("Failed to load file: {}", error);
-                None
             }
         }
     }
