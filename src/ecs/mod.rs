@@ -1,28 +1,39 @@
+use std::cell::{RefCell, RefMut, Ref};
+use std::borrow::{Borrow, BorrowMut};
+
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::{
     event::*,
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    event_loop::{ ControlFlow, EventLoop },
+    window::{ WindowBuilder, Window },
 };
 pub mod world;
 pub mod component;
 pub use world::World;
+
+use crate::engine::model;
 
 pub type System = fn(&mut World);
 
 pub struct Skeleton {
     world: World,
     init_system: Vec<System>,
-    system: Vec<System>
+    system: Vec<System>,
+    event_loop: EventLoop<()>
 }
 
 impl Default for Skeleton {
     fn default() -> Self {
+        let event_loop = EventLoop::new();
+        let window = WindowBuilder::new().build(&event_loop).unwrap();
+        let state = pollster::block_on(crate::engine::State::new(window));
+
         Self {
-            world: World::new(),
+            world: World::new(state),
             init_system: Vec::new(),
-            system: Vec::new()
+            system: Vec::new(),
+            event_loop,
         }
     }
 }
@@ -46,8 +57,6 @@ impl Skeleton {
                 env_logger::init();
             }
         }
-        let event_loop = EventLoop::new();
-        let window = WindowBuilder::new().build(&event_loop).unwrap();
 
         // iterate over init systems
         for &system in &self.init_system[..] {
@@ -73,22 +82,27 @@ impl Skeleton {
                 .expect("Couldn't append canvas to document body.");
         }
 
-        let mut state = crate::engine::State::new(window).await;
         let mut last_render_time = instant::Instant::now();
 
-        event_loop.run(move |event, _, control_flow| {
+        self.event_loop.run(move |event, _, control_flow| {
+        
+            // iterate over systems
+            for &system in &self.system[..] {
+                system(&mut self.world);
+            }
+            
             match event {
                 Event::DeviceEvent {
                     event: DeviceEvent::MouseMotion{ delta, },
                     .. // We're not using device_id currently
-                } => if state.mouse_pressed {
-                    state.camera_controller.process_mouse(delta.0, delta.1)
+                } => if self.world.state.mouse_pressed {
+                    self.world.state.camera_controller.process_mouse(delta.0, delta.1)
                 }
                 Event::WindowEvent {
                     ref event,
                     window_id,
-                } if window_id == state.window().id() => {
-                    if !state.input(event) {
+                } if window_id == self.world.state.window().id() => {
+                    if !self.world.state.input(event) {
                         match event {
                             #[cfg(not(target_arch="wasm32"))]
                             WindowEvent::CloseRequested
@@ -102,25 +116,30 @@ impl Skeleton {
                                 ..
                             } => *control_flow = ControlFlow::Exit,
                             WindowEvent::Resized(physical_size) => {
-                                state.resize(*physical_size);
+                                self.world.state.resize(*physical_size);
                             }
                             WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
                                 // new_inner_size is &&mut so w have to dereference it twice
-                                state.resize(**new_inner_size);
+                                self.world.state.resize(**new_inner_size);
                             }
                             _ => {}
                         }
                     }
                 }
-                Event::RedrawRequested(window_id) if window_id == state.window().id() => {
+                Event::RedrawRequested(window_id) if window_id == self.world.state.window().id() => {
                     let now = instant::Instant::now();
                     let dt = now - last_render_time;
                     last_render_time = now;
-                    state.update(dt);
-                    match state.render() {
+                    self.world.state.update(dt);
+                    // let world = &mut self.world;
+                    //let models: Ref<Vec<Option<model::Model>>>;
+                    // {
+                    //    let models = self.world.borrow_component_vec::<model::Model>().unwrap();
+                    // }
+                    match self.world.state.render() {
                         Ok(_) => {}
                         // Reconfigure the surface if it's lost or outdated
-                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => self.world.state.resize(self.world.state.size),
                         // The system is out of memory, we should probably quit
                         Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
 
@@ -130,20 +149,15 @@ impl Skeleton {
                 Event::RedrawEventsCleared => {
                     // RedrawRequested will only trigger once, unless we manually
                     // request it.
-                    state.window().request_redraw();
+                    self.world.state.window().request_redraw();
                 }
                 _ => {}
-            }
-        
-            // iterate over systems
-            for &system in &self.system[..] {
-                system(&mut self.world);
             }
         });
     }
 
     pub fn add_init_system(mut self, system: System) -> Skeleton {
-        self.system.push(system);
+        self.init_system.push(system);
         self
     }
 

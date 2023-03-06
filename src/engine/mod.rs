@@ -1,13 +1,17 @@
+use std::cell::{RefCell, RefMut, Ref};
 use wgpu::util::DeviceExt;
 use winit::{
     window::Window,
     event::*
 };
 use cgmath::prelude::*;
+use crate::engine::model::RenderMethod;
+use crate::prelude::World;
+use crate::ecs::component::*;
 
 mod texture;
 pub mod model;
-mod resources;
+pub mod resources;
 mod camera;
 
 use model::Vertex;
@@ -96,35 +100,46 @@ struct LightUniform {
 }
 
 pub struct State {
+    // Window settings
     surface: wgpu::Surface,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     clear_color: wgpu::Color,
-    render_pipeline: wgpu::RenderPipeline,
+
+    // Camera
     camera: camera::Camera,
     projection: camera::Projection,
     pub camera_controller: camera::CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
+
+    // object (instanced)
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+    pub texture_bind_group_layout: wgpu::BindGroupLayout,
     depth_texture: texture::Texture,
     obj_model: model::Model,
+    render_pipeline: wgpu::RenderPipeline,
+
+    // light
     light_uniform: LightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
-    debug_material: model::Material,
+
     pub mouse_pressed: bool,
+    // ECS
+    pub entity_count: usize,
+    pub component_vecs: Vec<Box<dyn ComponentVec>>,
 }
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: Window) -> Self {
+    pub async fn new(window: Window) -> State {
         let size = window.inner_size();
         let clear_color = wgpu::Color {
             r: 0.1,
@@ -349,6 +364,7 @@ impl State {
             label: None,
         });
 
+        /*
         let debug_material = {
             let diffuse_bytes = include_bytes!("../../res/brick-diffuse.jpg");
             let normal_bytes = include_bytes!("../../res/brick-normal.jpg");
@@ -358,6 +374,7 @@ impl State {
             
             model::Material::new(&device, "alt-material", diffuse_texture, normal_texture, &texture_bind_group_layout)
         };
+        */
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -430,6 +447,7 @@ impl State {
             camera_bind_group,
             instances,
             instance_buffer,
+            texture_bind_group_layout,
             depth_texture,
             obj_model,
             light_uniform,
@@ -437,8 +455,9 @@ impl State {
             light_bind_group,
             light_render_pipeline,
             #[allow(dead_code)]
-            debug_material,
             mouse_pressed: false,
+            entity_count: 0,
+            component_vecs: Vec::new(),
         }
     }
 
@@ -506,6 +525,8 @@ impl State {
         });
 
         {
+            use model::DrawModel;
+            let mut models = self.borrow_component_vec_mut::<model::Model>().unwrap();
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -526,6 +547,8 @@ impl State {
                 }),
             });
 
+            // draw all models
+
             use model::DrawLight;
             render_pass.set_pipeline(&self.light_render_pipeline);
             render_pass.draw_light_model(
@@ -534,11 +557,32 @@ impl State {
                 &self.light_bind_group,
             );
 
+            for model in models.iter_mut() {
+                match model {
+                    Some(model) => {
+                        render_pass.set_pipeline(&self.render_pipeline);
+                        // Todo move instance_buffer into model
+                        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+                        match model.render_method {
+                            RenderMethod::Draw_Model_Instanced => {
+                                // Todo move instances into Model
+                                render_pass.draw_model_instanced(model, 0..self.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
+                            }
+                            _ => {}
+                        }
+                    }
+                    None => {
+                    }
+                }
+
+            } 
+
+            /*
             use model::DrawModel;
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.draw_model_instanced(&self.obj_model, 0..self.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
-            /*
+
             render_pass.draw_model_instanced_with_material(
                 &self.obj_model,
                 &self.debug_material,
@@ -554,6 +598,20 @@ impl State {
         output.present();
 
         Ok(())
+    }
+
+    fn borrow_component_vec_mut<ComponentType: 'static>(
+        &self,
+    ) -> Option<RefMut<Vec<Option<ComponentType>>>> {
+        for component_vec in self.component_vecs.iter() {
+            if let Some(component_vec) = component_vec
+                .as_any()
+                .downcast_ref::<RefCell<Vec<Option<ComponentType>>>>()
+            {
+                return Some(component_vec.borrow_mut());
+            }
+        }
+        None
     }
 }
 

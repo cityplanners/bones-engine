@@ -1,25 +1,29 @@
-use std::cell::{RefCell, RefMut};
+use std::cell::{RefCell, RefMut, Ref};
 use crate::ecs::component::*;
+use crate::engine::State;
+use crate::engine::model::Model;
 
 pub struct World {
-    entity_count: usize,
-    component_vecs: Vec<Box<dyn ComponentVec>>
+    // entity_count: usize,
+    // component_vecs: Vec<Box<dyn ComponentVec>>,
+    pub state: State,
 }
 
 impl World {
-    pub fn new() -> World {
+    pub fn new(state: State) -> World {
         Self {
-            entity_count: 0,
-            component_vecs: Vec::new()
+            // entity_count: 0,
+            // component_vecs: Vec::new(),
+            state
         }
     }
 
     pub fn spawn_entity(&mut self) -> usize {
-        let entity_id = self.entity_count;
-        for component_vec in self.component_vecs.iter_mut() {
+        let entity_id = self.state.entity_count;
+        for component_vec in self.state.component_vecs.iter_mut() {
             component_vec.push_none();
         }
-        self.entity_count += 1;
+        self.state.entity_count += 1;
         entity_id
     }
 
@@ -29,7 +33,7 @@ impl World {
         component: ComponentType,
     ) {
         // Search for any existing ComponentVecs that match the type of the component being added.
-        for component_vec in self.component_vecs.iter_mut() {
+        for component_vec in self.state.component_vecs.iter_mut() {
             if let Some(component_vec) = component_vec
                 .as_any_mut()
                 .downcast_mut::<RefCell<Vec<Option<ComponentType>>>>()
@@ -41,23 +45,37 @@ impl World {
 
         // No matching component storage exists yet, so we have to make one.
         let mut new_component_vec: Vec<Option<ComponentType>> =
-            Vec::with_capacity(self.entity_count);
+            Vec::with_capacity(self.state.entity_count);
 
         // All existing entities don't have this component, so we give them `None`
-        for _ in 0..self.entity_count {
+        for _ in 0..self.state.entity_count {
             new_component_vec.push(None);
         }
 
         // Give this Entity the Component.
         new_component_vec[entity] = Some(component);
-        self.component_vecs
+        self.state.component_vecs
             .push(Box::new(RefCell::new(new_component_vec)));
+    }
+
+    pub fn borrow_component_vec<ComponentType: 'static>(
+        &self,
+    ) -> Option<Ref<Vec<Option<ComponentType>>>> {
+        for component_vec in self.state.component_vecs.iter() {
+            if let Some(component_vec) = component_vec
+                .as_any()
+                .downcast_ref::<RefCell<Vec<Option<ComponentType>>>>()
+            {
+                return Some(component_vec.borrow());
+            }
+        }
+        None
     }
 
     pub fn borrow_component_vec_mut<ComponentType: 'static>(
         &self,
     ) -> Option<RefMut<Vec<Option<ComponentType>>>> {
-        for component_vec in self.component_vecs.iter() {
+        for component_vec in self.state.component_vecs.iter() {
             if let Some(component_vec) = component_vec
                 .as_any()
                 .downcast_ref::<RefCell<Vec<Option<ComponentType>>>>()
@@ -66,5 +84,19 @@ impl World {
             }
         }
         None
+    }
+
+    pub fn load_model(&self, filename: &str) -> Option<Model> {
+        let result = pollster::block_on(crate::engine::resources::load_model(filename, &self.state.device, &self.state.queue, &self.state.texture_bind_group_layout));
+        match result {
+            Ok(model) => {
+                Some(model)
+            }
+            Err(error) => {
+                // TODO: Handle error
+                panic!("Failed to load file: {}", error);
+                None
+            }
+        }
     }
 }
