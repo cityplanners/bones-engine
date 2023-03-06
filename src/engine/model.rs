@@ -37,9 +37,22 @@ impl Vertex for ModelVertex {
     }
 }
  
+pub enum RenderMethod {
+    Draw_Mesh,
+    Draw_Mesh_Instanced,
+    Draw_Model,
+    Draw_Model_Instanced,
+    Draw_Model_Instanced_With_Material,
+    Draw_Light_Mesh,
+    Draw_Light_Mesh_Instanced,
+    Draw_Light_Model,
+    Draw_Light_Model_Instanced
+}
+ 
 pub struct Model {
     pub meshes: Vec<Mesh>,
     pub materials: Vec<Material>,
+    pub render_method: RenderMethod
 }
  
 pub struct Material {

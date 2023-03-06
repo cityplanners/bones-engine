@@ -25,7 +25,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
                 .text()
                 .await?;
         } else {
-            let path = std::path::Path::new(env!("OUT_DIR"))
+            let path = std::path::Path::new(env!("CARGO_TARGET_DIR"))
                 .join("res")
                 .join(file_name);
             let txt = std::fs::read_to_string(path)?;
@@ -45,7 +45,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
                 .await?
                 .to_vec();
         } else {
-            let path = std::path::Path::new(env!("OUT_DIR"))
+            let path = std::path::Path::new(env!("CARGO_TARGET_DIR"))
                 .join("res")
                 .join(file_name);
             let data = std::fs::read(path)?;
@@ -213,5 +213,5 @@ pub async fn load_model(
         })
         .collect::<Vec<_>>();
 
-    Ok(model::Model { meshes, materials })
+    Ok(model::Model { meshes, materials, render_method: model::RenderMethod::Draw_Model_Instanced })
 }
