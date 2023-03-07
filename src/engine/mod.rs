@@ -5,7 +5,6 @@ use winit::{
     event::*
 };
 use cgmath::prelude::*;
-use crate::engine::model::RenderMethod;
 use crate::ecs::component::*;
 
 mod texture;
@@ -40,53 +39,6 @@ impl CameraUniform {
     }
 }
 
-struct Instance {
-    position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>,
-}
-
-impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position) * cgmath::Matrix4::from(self.rotation)).into(),
-            normal: cgmath::Matrix3::from(self.rotation).into(),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct InstanceRaw {
-    model: [[f32; 4]; 4],
-    normal: [[f32; 3]; 3],
-}
-
-impl InstanceRaw {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-        // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
-        // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
-        const ATTRIBS: [wgpu::VertexAttribute; 7] =
-            wgpu::vertex_attr_array![
-                5 => Float32x4,
-                6 => Float32x4,
-                7 => Float32x4,
-                8 => Float32x4,
-                9 => Float32x3,
-                10 => Float32x3,
-                11 => Float32x3,
-            ];
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
-            // We need to switch from using a step mode of Vertex to Instance
-            // This means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &ATTRIBS,
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct LightUniform {
@@ -117,8 +69,6 @@ pub struct State {
     camera_bind_group: wgpu::BindGroup,
 
     // object (instanced)
-    instances: Vec<Instance>,
-    instance_buffer: wgpu::Buffer,
     pub texture_bind_group_layout: wgpu::BindGroupLayout,
     depth_texture: texture::Texture,
     obj_model: model::Model,
@@ -146,29 +96,6 @@ impl State {
             b: 0.3,
             a: 1.0,
         };
-
-        const NUM_INSTANCES_PER_ROW: u32 = 10;
-        const INSTANCE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_INSTANCES_PER_ROW as f32 * 0.5, 0.0, NUM_INSTANCES_PER_ROW as f32 * 0.5);
-
-        const SPACE_BETWEEN: f32 = 3.0;
-        let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-
-                let position = cgmath::Vector3 { x, y: 0.0, z };
-
-                let rotation = if position.is_zero() {
-                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-                } else {
-                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                };
-
-                Instance {
-                    position, rotation,
-                }
-            })
-        }).collect::<Vec<_>>();
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
@@ -207,15 +134,6 @@ impl State {
             },
             None, // Trace path
         ).await.unwrap();
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Instance Buffer"),
-                contents: bytemuck::cast_slice(&instance_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            }
-        );
 
         let surface_caps = surface.get_capabilities(&adapter);
         // Shader code in this tutorial assumes an sRGB surface texture. Using a different
@@ -386,7 +304,7 @@ impl State {
                 Some(texture::Texture::DEPTH_FORMAT),
                 &[
                     model::ModelVertex::desc(),
-                    InstanceRaw::desc()
+                    model::InstanceRaw::desc()
                 ],
                 shader,
             )
@@ -432,8 +350,8 @@ impl State {
             camera_uniform,
             camera_buffer,
             camera_bind_group,
-            instances,
-            instance_buffer,
+            // instances,
+            // instance_buffer,
             texture_bind_group_layout,
             depth_texture,
             obj_model,
@@ -493,6 +411,7 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
+        // TODO: Abstract player controls away from Camera
         self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform.update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
@@ -513,7 +432,9 @@ impl State {
 
         {
             use model::DrawModel;
+            // TODO: check if None first
             let mut models = self.borrow_component_vec_mut::<model::Model>().unwrap();
+            //let mut lights = self.borrow_component_vec_mut::<model::Light>().unwrap();
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -534,34 +455,39 @@ impl State {
                 }),
             });
 
-            // draw all models
-
-            use model::DrawLight;
+            // Draw all lights
+            // use model::DrawLight;
+            /*
             render_pass.set_pipeline(&self.light_render_pipeline);
-            render_pass.draw_light_model(
+            render_pass.draw_light_model_instanced(
                 &self.obj_model,
+                0..1,
                 &self.camera_bind_group,
                 &self.light_bind_group,
-            );
+            );  */
+            //for light in models.iter_mut() {
+            // }
 
+            // draw all models
             for model in models.iter_mut() {
-                match model {
-                    Some(model) => {
-                        render_pass.set_pipeline(&self.render_pipeline);
-                        // Todo move instance_buffer into model
-                        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-                        match model.render_method {
-                            RenderMethod::Draw_Model_Instanced => {
-                                // Todo move instances into Model
-                                render_pass.draw_model_instanced(model, 0..self.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
-                            }
-                            _ => {}
-                        }
-                    }
-                    None => {
-                    }
-                }
+                if let Some(model) = model {
+                    render_pass.set_pipeline(&self.render_pipeline);
 
+                    // derive the instance buffer
+                    let instance_data = model.instances.iter().map(model::Instance::to_raw).collect::<Vec<_>>();
+                    // let instance_buffer = &self.device.create_buffer_init(
+                    model.instance_buffer = self.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("Instance Buffer"),
+                            contents: bytemuck::cast_slice(&instance_data),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        }
+                    );
+
+                    render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
+                    // Todo move instances into Model
+                    render_pass.draw_model_instanced(model, 0..model.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
+                }
             } 
 
         }
