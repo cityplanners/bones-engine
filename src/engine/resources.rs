@@ -1,8 +1,11 @@
 use std::io::{BufReader, Cursor};
 use cfg_if::cfg_if;
 use wgpu::util::DeviceExt;
+use cgmath::prelude::*;
 
 use crate::engine::{model, texture};
+
+use super::model::Instance;
 
 #[cfg(target_arch = "wasm32")]
 fn format_url(file_name: &str) -> reqwest::Url {
@@ -213,5 +216,19 @@ pub async fn load_model(
         })
         .collect::<Vec<_>>();
 
-    Ok(model::Model { meshes, materials, render_method: model::RenderMethod::Draw_Model_Instanced })
+    let instance = Instance {
+        position: cgmath::Vector3::new(0.0, 0.0, 0.0),
+        rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+    };
+    let instances = vec![instance];
+    let instance_data = instances.iter().map(model::Instance::to_raw).collect::<Vec<_>>();
+    let instance_buffer = device.create_buffer_init(
+        &wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        }
+    );
+
+    Ok(model::Model { meshes, materials, instances, instance_buffer } )
 }
