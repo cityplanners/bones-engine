@@ -221,8 +221,6 @@ pub async fn load_model(
         rotation: cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
     };
     let instances = vec![instance];
-
-    // let buffer = wgpu::Buffer::
     let instance_data = instances.iter().map(model::Instance::to_raw).collect::<Vec<_>>();
     let instance_buffer = device.create_buffer_init(
         &wgpu::util::BufferInitDescriptor {

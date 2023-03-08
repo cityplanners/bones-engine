@@ -432,63 +432,62 @@ impl State {
 
         {
             use model::DrawModel;
-            // TODO: check if None first
-            let mut models = self.borrow_component_vec_mut::<model::Model>().unwrap();
-            //let mut lights = self.borrow_component_vec_mut::<model::Light>().unwrap();
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
-                        store: true,
-                    },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: true,
+
+            if let Some(mut models) = self.borrow_component_vec_mut::<model::Model>() {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(self.clear_color),
+                            store: true,
+                        },
+                    })],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        view: &self.depth_texture.view,
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: true,
+                        }),
+                        stencil_ops: None,
                     }),
-                    stencil_ops: None,
-                }),
-            });
+                });
 
-            // Draw all lights
-            // use model::DrawLight;
-            /*
-            render_pass.set_pipeline(&self.light_render_pipeline);
-            render_pass.draw_light_model_instanced(
-                &self.obj_model,
-                0..1,
-                &self.camera_bind_group,
-                &self.light_bind_group,
-            );  */
-            //for light in models.iter_mut() {
-            // }
+                // Draw all lights
+                // TODO: add support for different shaders
+                /*
+                use model::DrawLight;
+                render_pass.set_pipeline(&self.light_render_pipeline);
+                render_pass.draw_light_model_instanced(
+                    &self.obj_model,
+                    0..1,
+                    &self.camera_bind_group,
+                    &self.light_bind_group,
+                );
+                */
 
-            // draw all models
-            for model in models.iter_mut() {
-                if let Some(model) = model {
-                    render_pass.set_pipeline(&self.render_pipeline);
+                // Draw all models
+                for model in models.iter_mut() {
+                    if let Some(model) = model {
+                        render_pass.set_pipeline(&self.render_pipeline);
 
-                    // derive the instance buffer
-                    let instance_data = model.instances.iter().map(model::Instance::to_raw).collect::<Vec<_>>();
-                    // let instance_buffer = &self.device.create_buffer_init(
-                    model.instance_buffer = self.device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some("Instance Buffer"),
-                            contents: bytemuck::cast_slice(&instance_data),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        }
-                    );
+                        // derive the instance buffer
+                        let instance_data = model.instances.iter().map(model::Instance::to_raw).collect::<Vec<_>>();
+                        model.instance_buffer = self.device.create_buffer_init(
+                            &wgpu::util::BufferInitDescriptor {
+                                label: Some("Instance Buffer"),
+                                contents: bytemuck::cast_slice(&instance_data),
+                                usage: wgpu::BufferUsages::VERTEX,
+                            }
+                        );
 
-                    render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
-                    // Todo move instances into Model
-                    render_pass.draw_model_instanced(model, 0..model.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
-                }
-            } 
+                        render_pass.set_vertex_buffer(1, model.instance_buffer.slice(..));
+                        render_pass.draw_model(model, 0..model.instances.len() as u32, &self.camera_bind_group, &self.light_bind_group);
+                    }
+                } 
+
+            }
 
         }
 
