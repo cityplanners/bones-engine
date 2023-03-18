@@ -7,6 +7,7 @@ use winit::{
 use cgmath::prelude::*;
 use crate::ecs::component::*;
 
+pub mod light;
 mod texture;
 pub mod model;
 pub mod resources;
@@ -39,17 +40,6 @@ impl CameraUniform {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct LightUniform {
-    position: [f32; 3],
-    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
-    _padding: u32,
-    color: [f32; 3],
-    // Due to uniforms requiring 16 byte (4 float) spacing, we need to use a padding field here
-    _padding2: u32,
-}
-
 pub struct State {
     // Window settings
     surface: wgpu::Surface,
@@ -75,7 +65,7 @@ pub struct State {
     render_pipeline: wgpu::RenderPipeline,
 
     // light
-    light_uniform: LightUniform,
+    light_uniform: light::PointLightUniform,
     light_buffer: wgpu::Buffer,
     light_bind_group: wgpu::BindGroup,
     light_render_pipeline: wgpu::RenderPipeline,
@@ -88,7 +78,8 @@ pub struct State {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: Window) -> Self {
+    pub async fn new(window: Window, device: wgpu::Device, queue: wgpu::Queue, surface: wgpu::Surface, config: wgpu::SurfaceConfiguration) -> State {
+
         let size = window.inner_size();
         let clear_color = wgpu::Color {
             r: 0.1,
@@ -99,27 +90,28 @@ impl State {
 
         // The instance is a handle to our GPU
         // Backends::all => Vulkan + Metal + DX12 + Browser WebGPU
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            // Workaround for https://github.com/gfx-rs/wgpu/issues/2540,
-            // set backend to Vulkan for now
-            backends: wgpu::Backends::from_bits_truncate(1 << wgpu::Backend::Vulkan as u32),
-            dx12_shader_compiler: Default::default(),
-        });
+        // let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        //     // Workaround for https://github.com/gfx-rs/wgpu/issues/2540,
+        //     // set backend to Vulkan for now
+        //     backends: wgpu::Backends::from_bits_truncate(1 << wgpu::Backend::Vulkan as u32),
+        //     dx12_shader_compiler: Default::default(),
+        // });
         
         // # Safety
         //
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
-        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        // let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
-        let adapter = instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            },
-        ).await.unwrap();
+        // let adapter = instance.request_adapter(
+        //     &wgpu::RequestAdapterOptions {
+        //         power_preference: wgpu::PowerPreference::default(),
+        //         compatible_surface: Some(&surface),
+        //         force_fallback_adapter: false,
+        //     },
+        // ).await.unwrap();
     
+        /*
         let (device, queue) = adapter.request_device(
             &wgpu::DeviceDescriptor {
                 features: wgpu::Features::empty(),
@@ -134,27 +126,28 @@ impl State {
             },
             None, // Trace path
         ).await.unwrap();
+        */
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        let surface_format = surface_caps.formats.iter()
-            .copied()
-            .filter(|f| f.describe().srgb)
-            .next()
-            .unwrap_or(surface_caps.formats[0]);
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            // make sure width and height are not 0
-            width: size.width,
-            height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-        };
-        surface.configure(&device, &config);
+        // let surface_caps = surface.get_capabilities(&adapter);
+        // // Shader code in this tutorial assumes an sRGB surface texture. Using a different
+        // // one will result all the colors coming out darker. If you want to support non
+        // // sRGB surfaces, you'll need to account for that when drawing to the frame.
+        // let surface_format = surface_caps.formats.iter()
+        //     .copied()
+        //     .filter(|f| f.describe().srgb)
+        //     .next()
+        //     .unwrap_or(surface_caps.formats[0]);
+        // let config = wgpu::SurfaceConfiguration {
+        //     usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        //     format: surface_format,
+        //     // make sure width and height are not 0
+        //     width: size.width,
+        //     height: size.height,
+        //     present_mode: surface_caps.present_modes[0],
+        //     alpha_mode: surface_caps.alpha_modes[0],
+        //     view_formats: vec![],
+        // };
+        // surface.configure(&device, &config);
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -241,12 +234,13 @@ impl State {
 
         let depth_texture = texture::Texture::create_depth_texture_non_comparison_sampler(&device, &config, "depth_texture");
 
-        let light_uniform = LightUniform {
+        let light_uniform = light::PointLightUniform {
             position: [2.0, 2.0, 2.0],
-            _padding: 0,
+            ambient_intensity: 0.01,
             color: [1.0, 1.0, 1.0],
-            _padding2: 0,
+            diffuse_intensity: 0.5
         };
+        // let light_uniform = light::PointLight::new();
 
         // We'll want to update our lights position, so we use COPY_DST
         let light_buffer = device.create_buffer_init(

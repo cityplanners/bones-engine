@@ -1,4 +1,4 @@
-use std::cell::{RefCell, RefMut, Ref};
+use std::cell::{RefCell, RefMut};
 use crate::engine::State;
 use crate::engine::model::Model;
 

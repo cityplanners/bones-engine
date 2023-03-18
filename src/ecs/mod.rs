@@ -1,5 +1,6 @@
 #[cfg(target_arch="wasm32")]
 use wasm_bindgen::prelude::*;
+use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ ControlFlow, EventLoop },
@@ -15,13 +16,45 @@ pub struct Skeleton {
     world: World,
     init_system: Vec<System>,
     system: Vec<System>,
+    // surface: wgpu::Surface,
+    // device: wgpu::Device,
+    // queue: wgpu::Queue,
     event_loop: EventLoop<()>
 }
 
+/*
 impl Default for Skeleton {
     fn default() -> Self {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new().build(&event_loop).unwrap();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            // Workaround for https://github.com/gfx-rs/wgpu/issues/2540,
+            // set backend to Vulkan for now
+            backends: wgpu::Backends::from_bits_truncate(1 << wgpu::Backend::Vulkan as u32),
+            dx12_shader_compiler: Default::default(),
+        });
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let adapter = instance.request_adapter(
+            &wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            },
+        ).await.unwrap();
+        let (device, queue) = adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                features: wgpu::Features::empty(),
+                // WebGL doesn't support all of wgpu's features, so if
+                // we're building for the web we'll have to disable some.
+                limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
+                },
+                label: None,
+            },
+            None, // Trace path
+        ).await.unwrap();
         let state = pollster::block_on(crate::engine::State::new(window));
 
         Self {
@@ -32,10 +65,79 @@ impl Default for Skeleton {
         }
     }
 }
+*/
 
 impl Skeleton {
     pub fn new() -> Skeleton {
-        Skeleton::default()
+        pollster::block_on(Skeleton::_internal_new())
+    }
+
+    async fn _internal_new() -> Skeleton {
+        let event_loop = EventLoop::new();
+        let window = WindowBuilder::new().build(&event_loop).unwrap();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            // Workaround for https://github.com/gfx-rs/wgpu/issues/2540,
+            // set backend to Vulkan for now
+            backends: wgpu::Backends::from_bits_truncate(1 << wgpu::Backend::Vulkan as u32),
+            dx12_shader_compiler: Default::default(),
+        });
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
+        let adapter = instance.request_adapter(
+            &wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            },
+        ).await.unwrap();
+        let (device, queue) = adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                features: wgpu::Features::empty(),
+                // WebGL doesn't support all of wgpu's features, so if
+                // we're building for the web we'll have to disable some.
+                limits: if cfg!(target_arch = "wasm32") {
+                    wgpu::Limits::downlevel_webgl2_defaults()
+                } else {
+                    wgpu::Limits::default()
+                },
+                label: None,
+            },
+            None, // Trace path
+        ).await.unwrap();
+
+        let size = window.inner_size();
+        let surface_caps = surface.get_capabilities(&adapter);
+        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
+        // one will result all the colors coming out darker. If you want to support non
+        // sRGB surfaces, you'll need to account for that when drawing to the frame.
+        let surface_format = surface_caps.formats.iter()
+            .copied()
+            .filter(|f| f.describe().srgb)
+            .next()
+            .unwrap_or(surface_caps.formats[0]);
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            // make sure width and height are not 0
+            width: size.width,
+            height: size.height,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+        };
+        surface.configure(&device, &config);
+
+        let state = crate::engine::State::new(window, device, queue, surface, config).await;
+
+        Self {
+            world: World::new(state),
+            init_system: Vec::new(),
+            // surface,
+            // device,
+            // queue,
+            system: Vec::new(),
+            event_loop,
+        }
+
     }
 
     pub fn run(self) {
@@ -82,6 +184,7 @@ impl Skeleton {
         self.event_loop.run(move |event, _, control_flow| {
         
             // iterate over systems
+            // TODO: add an init system that adds buffers to all the models and lights
             for &system in &self.system[..] {
                 system(&mut self.world);
             }

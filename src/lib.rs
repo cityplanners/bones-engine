@@ -12,7 +12,8 @@ pub mod prelude {
             Mesh,
             Material,
             Instance
-        }
+        },
+        engine::light
     };
     pub use cgmath::{ Vector3, Quaternion, Deg };
     pub use cgmath::prelude::*;
